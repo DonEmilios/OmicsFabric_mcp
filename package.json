@@ -1,0 +1,9 @@
+{
+  "name": "datafarmer-mcp-root",
+  "version": "1.0.0",
+  "description": "Genomics Hybrid System Root",
+  "type": "module",
+  "scripts": {
+    "setup-claude": "node scripts/setup-claude.js"
+  }
+}

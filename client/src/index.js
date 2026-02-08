@@ -1,7 +1,8 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { CallToolResultSchema, ListToolsResultSchema, } from "@modelcontextprotocol/sdk/types.js";
-import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import OpenAI from "openai";
 import { z } from "zod";
 import * as dotenv from "dotenv";
 import * as path from "path";
@@ -9,14 +10,10 @@ import { fileURLToPath } from "url";
 dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-if (!ANTHROPIC_API_KEY) {
-    console.error("Please set ANTHROPIC_API_KEY in your environment");
-    process.exit(1);
-}
-const anthropic = new Anthropic({
-    apiKey: ANTHROPIC_API_KEY,
-});
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "sk-no-key-required";
+const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL || "http://localhost:11434/v1"; // Default to Ollama
+const PROVIDER = process.env.LLM_PROVIDER || "gemini"; // "gemini" or "local"
 const MCP_SERVERS = [
     {
         name: "genome-db",
@@ -49,89 +46,119 @@ async function createClient(serverConfig) {
     await client.connect(transport);
     return { name: serverConfig.name, client };
 }
+async function runGemini(userRequest, allTools, clients) {
+    if (!GEMINI_API_KEY) {
+        throw new Error("GEMINI_API_KEY is not set");
+    }
+    const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({
+        model: "gemini-2.0-flash-exp",
+        tools: [
+            {
+                functionDeclarations: allTools.map((t) => ({
+                    name: t.name,
+                    description: t.description,
+                    parameters: t.input_schema,
+                })),
+            },
+        ],
+    });
+    const chat = model.startChat();
+    let result = await chat.sendMessage(userRequest);
+    let response = result.response;
+    while (response.candidates?.[0]?.content?.parts?.some((part) => part.functionCall)) {
+        const functionCalls = response.candidates[0].content.parts.filter((part) => part.functionCall);
+        const toolResults = await Promise.all(functionCalls.map(async (part) => {
+            const functionCall = part.functionCall;
+            const tool = allTools.find((t) => t.name === functionCall.name);
+            const clientObj = clients.find((c) => c.name === tool?.serverName);
+            console.log(`Executing tool: ${functionCall.name} on server: ${tool?.serverName}`);
+            const callResult = await clientObj?.client.request({
+                method: "tools/call",
+                params: { name: functionCall.name, arguments: functionCall.args },
+            }, CallToolResultSchema);
+            return {
+                functionResponse: {
+                    name: functionCall.name,
+                    response: { result: callResult?.content.map((c) => c.text).join("\n") },
+                },
+            };
+        }));
+        result = await chat.sendMessage(toolResults);
+        response = result.response;
+    }
+    return response.text();
+}
+async function runLocal(userRequest, allTools, clients) {
+    const openai = new OpenAI({
+        apiKey: OPENAI_API_KEY,
+        baseURL: OPENAI_BASE_URL,
+    });
+    const messages = [{ role: "user", content: userRequest }];
+    const tools = allTools.map((t) => ({
+        type: "function",
+        function: {
+            name: t.name,
+            description: t.description,
+            parameters: t.input_schema,
+        },
+    }));
+    let iteration = 0;
+    while (iteration < 10) {
+        const response = await openai.chat.completions.create({
+            model: process.env.LOCAL_MODEL || "llama3", // Default to llama3 for Ollama
+            messages: messages,
+            tools: tools,
+        });
+        const message = response.choices[0].message;
+        messages.push(message);
+        if (!message.tool_calls || message.tool_calls.length === 0) {
+            return message.content;
+        }
+        const toolResults = await Promise.all((message.tool_calls || []).map(async (toolCall) => {
+            const tool = allTools.find((t) => t.name === toolCall.function.name);
+            const clientObj = clients.find((c) => c.name === tool?.serverName);
+            console.log(`Executing tool: ${toolCall.function.name} on server: ${tool?.serverName}`);
+            const result = await clientObj?.client.request({
+                method: "tools/call",
+                params: {
+                    name: toolCall.function.name,
+                    arguments: JSON.parse(toolCall.function.arguments),
+                },
+            }, CallToolResultSchema);
+            return {
+                tool_call_id: toolCall.id,
+                role: "tool",
+                name: toolCall.function.name,
+                content: result?.content.map((c) => c.text).join("\n"),
+            };
+        }));
+        messages.push(...toolResults);
+        iteration++;
+    }
+    return "Max iterations reached.";
+}
 async function main() {
     console.log("Connecting to MCP servers...");
     const clients = await Promise.all(MCP_SERVERS.map((config) => createClient(config)));
-    console.log("Fetching tools from all servers...");
     const allTools = [];
     for (const { name, client } of clients) {
         const toolsResponse = await client.request({ method: "tools/list" }, ListToolsResultSchema);
-        // Add server prefix to tool names to avoid collisions if necessary, 
-        // but here we just collect them.
         for (const tool of toolsResponse.tools) {
-            allTools.push({
-                ...tool,
-                serverName: name,
-            });
+            allTools.push({ ...tool, serverName: name });
         }
     }
-    console.log(`Discovered ${allTools.length} tools.`);
-    const messages = [];
-    // Example interaction loop (could be expanded to a full CLI)
-    const userRequest = process.argv.slice(2).join(" ") || "Analyze the BRCA1 gene in humans and search for known variants in gnomAD.";
-    console.log(`\nUser Request: ${userRequest}`);
-    messages.push({ role: "user", content: userRequest });
-    let iteration = 0;
-    while (iteration < 10) {
-        const response = await anthropic.messages.create({
-            model: "claude-3-5-sonnet-20241022",
-            max_tokens: 4096,
-            messages: messages,
-            tools: allTools.map(t => ({
-                name: t.name,
-                description: t.description,
-                input_schema: t.inputSchema,
-            })),
-        });
-        messages.push({ role: "assistant", content: response.content });
-        const toolCalls = response.content.filter((c) => c.type === "tool_use");
-        if (toolCalls.length === 0) {
-            const finalResponse = response.content.find((c) => c.type === "text");
-            if (finalResponse && "text" in finalResponse) {
-                console.log(`\nClaude: ${finalResponse.text}`);
-            }
-            break;
-        }
-        const toolResults = await Promise.all(toolCalls.map(async (toolCall) => {
-            const tool = allTools.find((t) => t.name === toolCall.name);
-            if (!tool) {
-                return {
-                    type: "tool_result",
-                    tool_use_id: toolCall.id,
-                    content: `Error: Tool ${toolCall.name} not found`,
-                    is_error: true,
-                };
-            }
-            const clientObj = clients.find((c) => c.name === tool.serverName);
-            console.log(`Executing tool: ${toolCall.name} on server: ${tool.serverName}`);
-            try {
-                const result = await clientObj?.client.request({
-                    method: "tools/call",
-                    params: {
-                        name: toolCall.name,
-                        arguments: toolCall.input,
-                    },
-                }, CallToolResultSchema);
-                return {
-                    type: "tool_result",
-                    tool_use_id: toolCall.id,
-                    content: result?.content.map((c) => c.text).join("\n"),
-                };
-            }
-            catch (error) {
-                return {
-                    type: "tool_result",
-                    tool_use_id: toolCall.id,
-                    content: `Error executing tool: ${error.message}`,
-                    is_error: true,
-                };
-            }
-        }));
-        messages.push({ role: "user", content: toolResults });
-        iteration++;
+    const userRequest = process.argv.slice(2).join(" ") || "Analyze the BRCA1 gene in humans.";
+    console.log(`\nUser Request: ${userRequest} (Provider: ${PROVIDER})`);
+    let finalResponse = null;
+    if (PROVIDER === "gemini") {
+        finalResponse = await runGemini(userRequest, allTools, clients);
     }
-    // Close connections
-    await Promise.all(clients.map(c => c.client.close()));
+    else {
+        finalResponse = await runLocal(userRequest, allTools, clients);
+    }
+    console.log(`\nResponse: ${finalResponse}`);
+    await Promise.all(clients.map((c) => c.client.close()));
 }
 main().catch(console.error);
 //# sourceMappingURL=index.js.map
