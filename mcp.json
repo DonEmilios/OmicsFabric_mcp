@@ -2,19 +2,19 @@
   "mcpServers": {
     "genome-db": {
       "command": "node",
-      "args": ["/Users/josephcalderon/Documents/Dev/datafarmer_mcp/mcps/mcp-genome-db/build/index.js"]
+      "args": ["./mcps/mcp-genome-db/build/index.js"]
     },
     "sequence-tools": {
       "command": "node",
-      "args": ["/Users/josephcalderon/Documents/Dev/datafarmer_mcp/mcps/mcp-sequence-tools/build/index.js"]
+      "args": ["./mcps/mcp-sequence-tools/build/index.js"]
     },
     "genomics-viz": {
       "command": "node",
-      "args": ["/Users/josephcalderon/Documents/Dev/datafarmer_mcp/mcps/mcp-genomics-viz/build/index.js"]
+      "args": ["./mcps/mcp-genomics-viz/build/index.js"]
     },
     "galaxy-integration": {
       "command": "node",
-      "args": ["/Users/josephcalderon/Documents/Dev/datafarmer_mcp/mcps/mcp-galaxy-integration/build/index.js"]
+      "args": ["./mcps/mcp-galaxy-integration/build/index.js"]
     }
   }
 }

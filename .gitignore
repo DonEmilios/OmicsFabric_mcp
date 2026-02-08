@@ -1,0 +1,36 @@
+# Dependency Directories
+node_modules/
+.venv/
+env/
+venv/
+ENV/
+bin/
+lib/
+share/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+__pycache__/
+*.pyc
+
+# Environment Variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env
+
+# IDE / System files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Project specific
+.agents/
+.gemini/
+scripts/init_skill.py
+scripts/package_skill.py
