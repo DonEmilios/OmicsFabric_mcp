@@ -31,9 +31,9 @@ Provides tools for basic sequence manipulation and analysis tasks, such as simil
 ### How to use it
 
 - **`run_blast`**: Perform a BLAST search against various sequence databases (e.g., DNA vs DNA, Protein vs Protein).
-  - _Parameters_: `sequence` (required), `database` (optional), `program` (optional).
+  - _Parameters_: `sequence` (required), `database` (optional), `program` (optional). **Works better if prompted geneID(s) directly.**
 - **`run_msa`**: Run Multiple Sequence Alignment (MSA) on a list of sequences to identify conserved patterns.
-  - _Parameters_: `sequences` (required), `tool` (optional: clustalw, muscle).
+  - _Parameters_: `sequences` (required), `tool` (optional: clustalw, muscle). **Works better if prompted geneID(s) directly.**
 
 ### What it is NOT for
 
