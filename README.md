@@ -1,3 +1,11 @@
+# Bioinformatics MCP
+
+An open-source Model Context Protocol (MCP) integrating
+industry-standard bioinformatics workflows for students,
+scientists and researchers.
+
+**Created and maintained by Emilio Calderon**
+
 Genomics Hybrid System (Skills + MCPs)
 A powerful bioinformatics framework combining AI Skills (domain expertise) with MCPs (external tool access) for genomics analysis.
 🧬 What This Does
@@ -54,4 +62,4 @@ Test MCP connections with different databases
 
 Need help? Open an issue - we're happy to guide you through your first contribution!
 📄 License
-MIT License - see LICENSE file for details.
+Apache-2.0 License - see the LICENSE file for details.
