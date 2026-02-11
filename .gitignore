@@ -34,3 +34,4 @@ Thumbs.db
 .gemini/
 scripts/init_skill.py
 scripts/package_skill.py
+ideas.md
