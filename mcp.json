@@ -1,20 +1,8 @@
-    {
+{
   "mcpServers": {
-    "genome-db": {
+    "omicfabric-master": {
       "command": "node",
-      "args": ["./mcps/mcp-genome-db/build/index.js"]
-    },
-    "sequence-tools": {
-      "command": "node",
-      "args": ["./mcps/mcp-sequence-tools/build/index.js"]
-    },
-    "genomics-viz": {
-      "command": "node",
-      "args": ["./mcps/mcp-genomics-viz/build/index.js"]
-    },
-    "galaxy-integration": {
-      "command": "node",
-      "args": ["./mcps/mcp-galaxy-integration/build/index.js"]
+      "args": ["./mcps/omicfabric-core/build/index.js"]
     }
   }
 }
